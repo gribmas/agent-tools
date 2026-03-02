@@ -4,12 +4,14 @@ Blackboard CLI - Fast agent coordination tool
 
 Commands:
   bb status          - Show ecosystem health
+  bb now             - THE ONE thing to do right now
   bb signals         - List active signals (with priority)
   bb post "message"  - Post a signal to the blackboard
   bb mailbox <agent> - Read your mailbox
   bb nudge <agent>   - Send a nudge to another agent
   bb actions         - Extract all actionable items from signals
   bb recent          - Show recent activity summary
+  bb summary         - Quick 5-line ecosystem overview
 """
 
 import sys
@@ -300,6 +302,77 @@ def cmd_recent():
                 print(f"   Duration: {duration}")
                 print(f"   Outcome: {outcome[:60]}...")
 
+def cmd_now():
+    """Show THE ONE thing to do right now"""
+    status_file = BLACKBOARD_DIR / "ecosystem-status.md"
+    if not status_file.exists():
+        print("❌ No ecosystem status found")
+        return
+    
+    content = status_file.read_text()
+    
+    # Find the ONE thing or TWO things
+    one_thing = re.search(r'\*\*The ONE Thing:\*\* (.+)', content)
+    two_things = re.search(r'\*\*The TWO Things.*?\*\* (.+?)\n\d\.\s+\*\*IMMEDIATE:\*\*\s+(.+?)\n\d\.\s+\*\*PRIMARY:\*\*\s+(.+?)(?:\n|$)', content, re.DOTALL)
+    
+    print("🎯 DO THIS NOW")
+    print("=" * 50)
+    
+    if two_things:
+        print(f"\n🔴 IMMEDIATE: {two_things.group(2)}")
+        print(f"\n🟡 PRIMARY: {two_things.group(3)}")
+    elif one_thing:
+        print(f"\n🎯 {one_thing.group(1)}")
+    else:
+        # Fall back to top action
+        signals_file = BLACKBOARD_DIR / "action-signals.md"
+        if signals_file.exists():
+            sig_content = signals_file.read_text()
+            first_high = re.search(r'### SIGNAL: (.+?)\n.*?\*\*Priority:\*\* HIGH.*?\*\*Needed from:\*\* (.+)', sig_content, re.DOTALL)
+            if first_high:
+                print(f"\n🔴 {first_high.group(1)}")
+                print(f"   {first_high.group(2)[:100]}")
+
+def cmd_summary():
+    """Quick 5-line ecosystem overview"""
+    status_file = BLACKBOARD_DIR / "ecosystem-status.md"
+    signals_file = BLACKBOARD_DIR / "action-signals.md"
+    
+    if not status_file.exists():
+        print("❌ No ecosystem status found")
+        return
+    
+    content = status_file.read_text()
+    
+    # Extract key metrics
+    health = re.search(r'\*\*Health Check:\*\* (.+?)—', content)
+    if not health:
+        health = re.search(r'\*\*Health Check:\*\* (.+)', content)
+    
+    signals_count = 0
+    high_count = 0
+    if signals_file.exists():
+        sig_content = signals_file.read_text()
+        signals_count = sig_content.count('### SIGNAL:')
+        high_count = sig_content.count('**Priority:** HIGH')
+    
+    last_check = re.search(r'\*\*Last Check:\*\* ([^—\n]+)', content)
+    
+    # Print compact summary
+    print("📊 ECOSYSTEM SUMMARY")
+    print("=" * 50)
+    if health:
+        health_text = health.group(1).strip()
+        print(f"Health: {health_text[:60]}...")
+    print(f"Signals: {signals_count} total, {high_count} HIGH priority")
+    if last_check:
+        print(f"Last update: {last_check.group(1).strip()}")
+    
+    # ONE thing
+    one_thing = re.search(r'\*\*The ONE Thing:\*\* (.+)', content)
+    if one_thing:
+        print(f"\n🎯 {one_thing.group(1)[:80]}...")
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -309,6 +382,10 @@ def main():
     
     if cmd == "status":
         cmd_status()
+    elif cmd == "now":
+        cmd_now()
+    elif cmd == "summary":
+        cmd_summary()
     elif cmd == "signals":
         priority = sys.argv[2] if len(sys.argv) > 2 else None
         cmd_signals(priority)
